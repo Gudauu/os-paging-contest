@@ -179,6 +179,67 @@ def jru(data, frame_num):
     end_time = time.time()
     printlog(fault, len(data),end_time-start_time)
 
+def prefetch(page,fetch_num):
+    # decide on fetch number
+    result = []
+    dec_page = int(page,16)
+    for dec_i in range(dec_page-int(fetch_num/2),dec_page+int(fetch_num/2)):
+        result.append(str(hex(dec_i))[2:] + '\n')
+    return result
+
+def lru_prefetch(data, frame_num,prefetch_freq = 0):
+    start_time = time.time()
+    memory = []
+    fault = 0
+    last_reference = {}
+    pref_count = 0
+    if prefetch_freq == 0:
+        prefetch_freq = 10
+    for page in data:
+        # add prefetch if this is the round
+        if pref_count == 0:
+            to_add = prefetch(page,prefetch_freq)
+            for each in to_add:
+                if each not in memory:
+                    memory.append(each)
+                    last_reference[each] = frame_num # give them a big number         
+
+        for node in last_reference:
+            last_reference[node] += 1
+        last_reference[page] = 0
+        
+        if memory.count(page) == 0:     #  not exist
+            if len(memory) < frame_num:
+                fault += 1
+                memory.append(page)
+            else:
+                fault += 1
+                # 找最久没有被访问的node
+                recently = None
+                for node in last_reference:    
+                    if recently == None:
+                        recently = node
+                        continue
+                    elif last_reference[node] > last_reference[recently]:
+                        recently = node
+                memory[memory.index(recently)] = page
+                last_reference.pop(recently)
+        else:
+            last_reference[page] = 0
+        # print(memory, page)
+        # print(last_reference)
+        # print(page, '\t',memory, "\nnumbers of fault:", fault)
+        pref_count = (pref_count + 1)%prefetch_freq
+
+    end_time = time.time()
+    printlog(fault, len(data),end_time-start_time)
+
+    
+
+
+
+
+
 
 
 def popular(data, frame_num):
@@ -201,14 +262,19 @@ def popular(data, frame_num):
             ghost_time[page] = 0
         else:
             fault += 1 
+            ghost_thresh = 60
             if len(memory) >= frame_num:
-                least_pop_value = memory[0]
+                least_pop_value = popular[memory[0]]
                 least_pop_index = 0
                 for i in range(frame_num):
+                    if ghost_time[memory[i]] > ghost_thresh:
+                        least_pop_index = i
+                        break
                     if popular[memory[i]] < least_pop_value:
                         least_pop_value = popular[memory[i]]
                         least_pop_index = i
                 memory.pop(least_pop_index)
+
             memory.append(page)
             ghost_time[page] = 0
 
@@ -219,49 +285,60 @@ def popular(data, frame_num):
 
 
 
+if __name__ == "__main__":
+    # prefetch('2001f8c\n',30)
+    # data = []
+    # with open("mm16.txt") as file:
+    #     for item in file:
+    #         # print(item)
+    #         data.append(item)
+    # lru_prefetch(data,60,10)
+    # start
 
-# start
+    data = []
+    shortargs = 'm:n:hf:p::'
+    longargs = []
+    opts, args = getopt.getopt( sys.argv[1:], shortargs, longargs )
+    prefetch_fr = 10
 
-# -m mode
-# -n frame number
-data = []
-shortargs = 'm:n:hf:'
-longargs = []
-opts, args = getopt.getopt( sys.argv[1:], shortargs, longargs )
-
-if args:
-    print('-h or --help for detail')
-    sys.exit(1)
-
-for opt,val in opts:
-    if opt in ( '-h' ):
-        print('No help document yet')
+    if args:
+        print('-h or --help for detail')
         sys.exit(1)
-    if opt in ( '-n'):
-        frame_num = int(val)
-        # print(frame_num)
-    if opt in ( '-m'):
-        mode = val
-        # print(mode)
-    if opt in ( '-f'):
-        filePath = val
-        # print(filePath)
-        with open(filePath) as file:
-            for item in file:
-                # print(item)
-                data.append(item)
+
+    for opt,val in opts:
+        if opt in ( '-h' ):
+            print('No help document yet')
+            sys.exit(1)
+        if opt in ( '-n'):
+            frame_num = int(val)
+            # print(frame_num)
+        if opt in ( '-m'):
+            mode = val
+            # print(mode)
+        if opt in ( '-f'):
+            filePath = val
+            # print(filePath)
+            with open(filePath) as file:
+                for item in file:
+                    # print(item)
+                    data.append(item)
+        if opt in ( '-p'):
+            prefetch_fr = int(val)
+            # print(prefetch_fr)
 
 
-if mode == "fifo":
-    fifo(data, frame_num)
-elif mode == "lru":
-    lru(data, frame_num)
-elif mode == "opt":
-    optimal(data, frame_num)
-elif mode == "sc":
-    sc(data, frame_num)
-elif mode == "jru":
-    jru(data, frame_num)
-elif mode == "popu":
-    popular(data, frame_num)    
-   
+    if mode == "fifo":
+        fifo(data, frame_num)
+    elif mode == "lru":
+        lru(data, frame_num)
+    elif mode == "opt":
+        optimal(data, frame_num)
+    elif mode == "sc":
+        sc(data, frame_num)
+    elif mode == "jru":
+        jru(data, frame_num)
+    elif mode == "popu":
+        popular(data, frame_num)  
+    elif mode == "lru_p":
+        lru_prefetch(data, frame_num,prefetch_fr)  
+    
